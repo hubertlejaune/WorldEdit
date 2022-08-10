@@ -86,6 +86,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -117,11 +118,34 @@ public class WorldEditPlugin extends JavaPlugin implements TabCompleter {
     public static final String CUI_PLUGIN_CHANNEL = "worldedit:cui";
     private static WorldEditPlugin INSTANCE;
     private static final int BSTATS_PLUGIN_ID = 3328;
+    private static Map<String, String> mohistKeyMapping;
 
     private final SimpleLifecycled<BukkitImplAdapter> adapter =
         SimpleLifecycled.invalid();
     private BukkitServerInterface platform;
     private BukkitConfiguration config;
+
+    private static Map<String, String> getMohistKeyMapping() {
+        if (mohistKeyMapping == null) {
+            mohistKeyMapping = new HashMap<String, String>();
+            for (Material material : Material.values()) {
+                try {
+                    String key =  material.createBlockData().getAsString();
+                    if (key.contains("[")) {
+                        key = key.substring(0, key.indexOf("["));
+                    }
+                    mohistKeyMapping.put(key, material.getKey().toString());
+                } catch (Exception ex) {
+                    //Probably not a block, ignoring it
+                }
+            }
+        }
+        return mohistKeyMapping;
+    }
+
+    private static String getMinecraftKey(String key) {
+        return getMohistKeyMapping().get(key);
+    }
 
     @Override
     public void onLoad() {
@@ -223,9 +247,17 @@ public class WorldEditPlugin extends JavaPlugin implements TabCompleter {
                     context.setTryLegacy(false);
                     context.setRestricted(false);
                     try {
-                        FuzzyBlockState state = (FuzzyBlockState) WorldEdit.getInstance().getBlockFactory().parseFromInput(
-                                BukkitAdapter.adapt(blockState.getBlockType()).createBlockData().getAsString(), context
-                        ).toImmutableState();
+                        String key = BukkitAdapter.adapt(blockState.getBlockType()).createBlockData().getAsString();
+                        if (!key.startsWith("minecraft:")) {
+                            String option = "";
+                            if (key.contains("[")) {
+                                option = key.substring(key.indexOf("["), key.length());
+                                key = key.substring(0, key.indexOf("["));
+                            }
+                            key = getMinecraftKey(key) + option;
+                        }
+
+                        FuzzyBlockState state = (FuzzyBlockState) WorldEdit.getInstance().getBlockFactory().parseFromInput(key, context).toImmutableState();
                         BlockState defaultState = blockState.getBlockType().getAllStates().get(0);
                         for (Map.Entry<Property<?>, Object> propertyObjectEntry : state.getStates().entrySet()) {
                             //noinspection unchecked
